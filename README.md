@@ -66,7 +66,19 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full diagram and per-
 
 ---
 
-## Quickstart
+## Deploy to Azure (free tier)
+
+Get a live URL in under 30 minutes — runs at **$0–$2/month** with scale-to-zero.
+
+1. Copy and fill `infra/main.parameters.json` (gitignored — never committed)
+2. Run `.\deploy\azure\deploy.ps1 -DockerHubUsername <your-username>`
+3. Visit the printed URL — Swagger is live
+
+Full guide: **[docs/AZURE_PRODUCTION_DEPLOYMENT.md](docs/AZURE_PRODUCTION_DEPLOYMENT.md)**
+
+---
+
+## Quickstart (Local)
 
 See **[docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)** for the full setup walkthrough.
 
