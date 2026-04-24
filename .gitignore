@@ -15,6 +15,11 @@ infra/main.parameters.json
 infra/*.bicepparam
 .azure/
 
+# Bicep-compiled ARM templates (generated artifacts — use main.bicep as source of truth)
+infra/main.json
+infra/*.json
+!infra/main.parameters.example.json
+
 # Certificates / keys
 *.pfx
 *.pem
