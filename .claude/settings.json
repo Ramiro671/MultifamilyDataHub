@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "WebFetch(*)"
+    ],
+    "deny": [
+      "Bash(git config --global *)",
+      "Bash(git config --system *)",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf ~/*)",
+      "Bash(sudo *)",
+      "Read(./.env)",
+      "Read(**/.env)"
+    ]
+  }
+}
