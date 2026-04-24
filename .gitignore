@@ -9,3 +9,13 @@ node_modules/
 docker/.volumes/
 logs/
 *.log
+
+# Azure deployment — real secrets; NEVER commit these
+infra/main.parameters.json
+infra/*.bicepparam
+.azure/
+
+# Certificates / keys
+*.pfx
+*.pem
+*.key
