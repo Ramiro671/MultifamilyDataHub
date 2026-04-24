@@ -4,7 +4,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 # Copy central NuGet and build props first so restore layer is cached
-COPY Directory.Packages.props Directory.Build.props ./
+COPY NuGet.config Directory.Packages.props Directory.Build.props ./
 
 # Copy project files and restore (cached unless deps change)
 COPY src/MDH.Shared/MDH.Shared.csproj               src/MDH.Shared/
