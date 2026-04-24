@@ -39,7 +39,11 @@ try
     builder.Services.AddAuthorization();
 
     // Anthropic HttpClient with Polly retry + circuit breaker
-    var apiKey = builder.Configuration["ANTHROPIC_API_KEY"] ?? "";
+    // Reads from "Anthropic:ApiKey" (works with Container Apps secrets as "Anthropic__ApiKey"
+    // env var) or falls back to the legacy "ANTHROPIC_API_KEY" env var for local .env compat.
+    var apiKey = builder.Configuration["Anthropic:ApiKey"]
+        ?? builder.Configuration["ANTHROPIC_API_KEY"]
+        ?? "";
     builder.Services.AddHttpClient<AnthropicClient>(client =>
     {
         client.BaseAddress = new Uri("https://api.anthropic.com");
@@ -81,7 +85,12 @@ try
         });
     });
 
-    builder.Services.AddHealthChecks();
+    // Readiness: verify the upstream AnalyticsApi is reachable.
+    // We do NOT call Anthropic on every probe to avoid burning tokens.
+    var analyticsBaseUrl = builder.Configuration["AnalyticsApi:BaseUrl"] ?? "http://localhost:5030";
+    builder.Services.AddHealthChecks()
+        .AddUrlGroup(new Uri($"{analyticsBaseUrl}/health"), name: "analytics-api", tags: ["ready"]);
+
     builder.WebHost.UseUrls("http://+:5040");
 
     var app = builder.Build();
@@ -92,6 +101,10 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapHealthChecks("/health");
+    app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready")
+    });
 
     var api = app.MapGroup("/api/v1").RequireAuthorization();
 

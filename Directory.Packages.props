@@ -51,7 +51,7 @@
   <ItemGroup Label="Health Checks">
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.0" />
     <PackageVersion Include="AspNetCore.HealthChecks.SqlServer" Version="8.0.2" />
-    <PackageVersion Include="AspNetCore.HealthChecks.MongoDb" Version="8.0.1" />
+    <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
   </ItemGroup>
 
   <ItemGroup Label="JWT">

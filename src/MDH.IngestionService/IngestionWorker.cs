@@ -19,7 +19,12 @@ public class IngestionWorker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalSeconds = _config.GetValue<int>("Ingestion:IntervalSeconds", 10);
-        _logger.LogInformation("IngestionWorker starting, interval={Interval}s", intervalSeconds);
+        // BatchSize: local default 1000 (demo power); cloud override via appsettings.Production.json
+        // Cosmos DB free tier = 1000 RU/s; each insert ~5-10 RU → 50 docs/tick @ 60s stays well within budget
+        var batchSize = _config.GetValue<int>("Ingestion:BatchSize", 1000);
+        _logger.LogInformation(
+            "IngestionWorker starting, interval={Interval}s, batchSize={BatchSize}",
+            intervalSeconds, batchSize);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -27,7 +32,7 @@ public class IngestionWorker : BackgroundService
             try
             {
                 _logger.LogInformation("Starting ingestion tick {CorrelationId}", correlationId);
-                var batch = ListingFaker.GenerateBatch(1000, correlationId);
+                var batch = ListingFaker.GenerateBatch(batchSize, correlationId);
                 await _store.InsertManyAsync(batch.Cast<object>(), stoppingToken);
                 _logger.LogInformation(
                     "Ingestion tick complete. CorrelationId={CorrelationId} Count={Count}",

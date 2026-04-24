@@ -69,9 +69,10 @@ try
         });
     });
 
-    // Health checks
+    // Health checks — liveness (always 200) vs readiness (SQL must respond)
+    // Azure SQL free tier auto-pauses; cold-start can take ~60 s — readiness probe handles this.
     builder.Services.AddHealthChecks()
-        .AddSqlServer(sqlConn, name: "sql-server");
+        .AddSqlServer(sqlConn, name: "sql-server", tags: ["ready"]);
 
     builder.WebHost.UseUrls("http://+:5030");
 
@@ -86,7 +87,10 @@ try
     app.UseAuthorization();
 
     app.MapHealthChecks("/health");
-    app.MapHealthChecks("/health/ready");
+    app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready")
+    });
 
     // API routes — all require auth
     var api = app.MapGroup("/api/v1").RequireAuthorization();
