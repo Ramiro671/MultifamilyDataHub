@@ -48,12 +48,13 @@ var containerEnvName  = 'cae-${namePrefix}'
 var sqlServerName     = 'sql-${namePrefix}-${uniqueSuffix}'
 var cosmosAccountName = 'cosmos-${namePrefix}-${uniqueSuffix}'
 
-// SQL connection string constructed from deployed server FQDN
-// ConnectRetryCount=3;ConnectRetryInterval=10 handles the Azure SQL free-tier auto-pause cold start
-var sqlConnectionString = 'Server=tcp:${sqlServerName}.database.windows.net,1433;Initial Catalog=MDH;User ID=${sqlAdminLogin};Password=${sqlAdminPassword};Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;ConnectRetryCount=3;ConnectRetryInterval=10;'
+// SQL connection string — uses environment().suffixes.sqlServerHostname to avoid hardcoded URLs
+// ConnectRetryCount=3;ConnectRetryInterval=10 handles Azure SQL free-tier auto-pause cold start
+var sqlHostSuffix = environment().suffixes.sqlServerHostname  // e.g. ".database.windows.net"
+var sqlConnectionString = 'Server=tcp:${sqlServerName}${sqlHostSuffix},1433;Initial Catalog=MDH;User ID=${sqlAdminLogin};Password=${sqlAdminPassword};Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;ConnectRetryCount=3;ConnectRetryInterval=10;'
 
-// Cosmos DB primary key and connection string resolved after deployment via listKeys()
-var cosmosConnectionString = 'mongodb://${cosmosAccountName}:${listKeys(cosmosAccount.id, cosmosAccount.apiVersion).primaryMasterKey}@${cosmosAccountName}.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${cosmosAccountName}@'
+// Cosmos DB primary key resolved via resource symbol reference (preferred over listKeys() call)
+var cosmosConnectionString = 'mongodb://${cosmosAccountName}:${cosmosAccount.listKeys().primaryMasterKey}@${cosmosAccountName}.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${cosmosAccountName}@'
 
 // Docker Hub image references (public — no registry credentials needed)
 var imgIngestion     = 'docker.io/${dockerHubUsername}/mdh-ingestion:${imageTag}'
@@ -140,7 +141,7 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-05-01-preview' = {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     maxSizeBytes: 34359738368    // 32 GB — free-offer maximum
     autoPauseDelay: 60           // Auto-pause after 60 min idle (saves cost; cold-start ~30–60 s)
-    minCapacity: '0.5'
+    minCapacity: any('0.5')      // GP_S_Gen5 min vCores; Bicep type says int but API accepts decimal string
     useFreeLimit: true           // Activates the Azure SQL free-offer tier
     freeLimitExhaustionBehavior: 'AutoPause'
     requestedBackupStorageRedundancy: 'Local'
@@ -242,7 +243,7 @@ resource caIngestion 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'ingestion'
           image: imgIngestion
-          resources: { cpu: '0.25', memory: '0.5Gi' }
+          resources: { cpu: any('0.25'), memory: '0.5Gi' }  // fractional CPU; any() bypasses Bicep int type
           env: [
             { name: 'ASPNETCORE_ENVIRONMENT',  value: 'Production' }
             { name: 'MONGO_CONNECTION_STRING',  secretRef: 'mongo-connection-string' }
@@ -270,6 +271,9 @@ resource caOrchestration 'Microsoft.App/containerApps@2024-03-01' = {
     environmentId: containerEnv.id
     configuration: {
       secrets: [
+        // sqlConnectionString / cosmosConnectionString are derived from @secure() params.
+        // Bicep can't trace @secure() through variable interpolation — suppress linter warning.
+        #disable-next-line use-secure-value-for-secure-inputs
         { name: 'sql-connection-string',   value: sqlConnectionString   }
         { name: 'mongo-connection-string', value: cosmosConnectionString }
       ]
@@ -284,7 +288,7 @@ resource caOrchestration 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'orchestration'
           image: imgOrchestration
-          resources: { cpu: '0.5', memory: '1Gi' }   // 0.5 vCPU / 1 GiB — Hangfire needs headroom
+          resources: { cpu: any('0.5'), memory: '1Gi' }   // 0.5 vCPU / 1 GiB — Hangfire needs headroom; any() for fractional CPU
           env: [
             { name: 'ASPNETCORE_ENVIRONMENT',   value: 'Production' }
             { name: 'SQL_CONNECTION_STRING',     secretRef: 'sql-connection-string'   }
@@ -311,6 +315,7 @@ resource caAnalyticsApi 'Microsoft.App/containerApps@2024-03-01' = {
     environmentId: containerEnv.id
     configuration: {
       secrets: [
+        #disable-next-line use-secure-value-for-secure-inputs
         { name: 'sql-connection-string', value: sqlConnectionString }
         { name: 'jwt-secret',            value: jwtSecret           }
       ]
@@ -326,7 +331,7 @@ resource caAnalyticsApi 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'analytics-api'
           image: imgAnalyticsApi
-          resources: { cpu: '0.25', memory: '0.5Gi' }
+          resources: { cpu: any('0.25'), memory: '0.5Gi' } // fractional CPU; any() bypasses Bicep int type
           env: [
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
             { name: 'SQL_CONNECTION_STRING',  secretRef: 'sql-connection-string' }
@@ -377,7 +382,7 @@ resource caInsights 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'insights'
           image: imgInsights
-          resources: { cpu: '0.25', memory: '0.5Gi' }
+          resources: { cpu: any('0.25'), memory: '0.5Gi' } // fractional CPU; any() bypasses Bicep int type
           env: [
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production'                          }
             { name: 'Anthropic__ApiKey',       secretRef: 'anthropic-api-key'              }
