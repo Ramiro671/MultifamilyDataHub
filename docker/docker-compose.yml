@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mdh-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "Your_Strong_P@ss"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - ./.volumes/sqlserver:/var/opt/mssql
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Your_Strong_P@ss' -Q 'SELECT 1' -No"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  mongo:
+    image: mongo:7
+    container_name: mdh-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mdh
+      MONGO_INITDB_ROOT_PASSWORD: mdh
+      MONGO_INITDB_DATABASE: mdh_raw
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./.volumes/mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  sqlserver_data:
+  mongo_data:
