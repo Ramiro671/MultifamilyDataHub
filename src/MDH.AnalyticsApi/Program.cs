@@ -1,4 +1,5 @@
 using System.Text;
+using MediatR;
 using MDH.AnalyticsApi.Features.Listings;
 using MDH.AnalyticsApi.Features.Markets;
 using MDH.AnalyticsApi.Persistence;

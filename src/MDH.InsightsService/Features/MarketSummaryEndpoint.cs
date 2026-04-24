@@ -11,7 +11,7 @@ public static class MarketSummaryEndpoint
         AnthropicClient anthropic,
         IHttpClientFactory httpClientFactory,
         IConfiguration config,
-        ILogger<Program> logger,
+        ILogger<InsightEndpoints> logger,
         CancellationToken ct)
     {
         logger.LogInformation("Market summary request for {Submarket} from {From} to {To}",

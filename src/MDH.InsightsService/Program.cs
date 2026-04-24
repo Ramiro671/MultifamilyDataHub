@@ -100,7 +100,7 @@ try
         AnthropicClient anthropic,
         IHttpClientFactory factory,
         IConfiguration config,
-        ILogger<Program> logger,
+        ILogger<InsightEndpoints> logger,
         CancellationToken ct) =>
         MarketSummaryEndpoint.HandleAsync(request, anthropic, factory, config, logger, ct))
     .WithName("GetMarketSummary")
@@ -111,7 +111,7 @@ try
         AnthropicClient anthropic,
         IHttpClientFactory factory,
         IConfiguration config,
-        ILogger<Program> logger,
+        ILogger<InsightEndpoints> logger,
         CancellationToken ct) =>
         ListingExplainEndpoint.HandleAsync(request, anthropic, factory, config, logger, ct))
     .WithName("ExplainListing")

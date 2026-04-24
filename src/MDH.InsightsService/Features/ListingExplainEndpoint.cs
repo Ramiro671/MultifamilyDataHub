@@ -11,7 +11,7 @@ public static class ListingExplainEndpoint
         AnthropicClient anthropic,
         IHttpClientFactory httpClientFactory,
         IConfiguration config,
-        ILogger<Program> logger,
+        ILogger<InsightEndpoints> logger,
         CancellationToken ct)
     {
         logger.LogInformation("Listing explain request for {ListingId}", request.ListingId);
