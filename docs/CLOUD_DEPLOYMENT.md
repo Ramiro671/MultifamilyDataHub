@@ -1,5 +1,9 @@
 # Cloud Deployment Guide — MultifamilyDataHub
 
+> **Looking to actually deploy?** See [`docs/AZURE_PRODUCTION_DEPLOYMENT.md`](AZURE_PRODUCTION_DEPLOYMENT.md) for the step-by-step guide to get a live URL on Azure free tier in under 30 minutes. This document is the conceptual comparison of AWS vs Azure paths.
+
+---
+
 ## Overview
 
 This guide covers two deployment paths:
