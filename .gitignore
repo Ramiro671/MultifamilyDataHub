@@ -1,0 +1,8 @@
+﻿bin/
+obj/
+.vs/
+.env
+*.user
+*.suo
+TestResults/
+node_modules/
