@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "namePrefix": {
+      "value": "mdh"
+    },
+    "sqlAdminLogin": {
+      "value": "mdhsqladmin"
+    },
+    "sqlAdminPassword": {
+      "value": "REPLACE_WITH_STRONG_PASSWORD_Min8_Uppercase_Digit_Symbol"
+    },
+    "anthropicApiKey": {
+      "value": "sk-ant-REPLACE_ME"
+    },
+    "jwtSecret": {
+      "value": "REPLACE_WITH_64_CHAR_RANDOM_SECRET_HERE_MINIMUM_64_BYTES_PLEASE"
+    },
+    "imageTag": {
+      "value": "latest"
+    },
+    "dockerHubUsername": {
+      "value": "REPLACE_WITH_YOUR_DOCKERHUB_USERNAME"
+    }
+  }
+}
