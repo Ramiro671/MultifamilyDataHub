@@ -1,0 +1,200 @@
+name: Deploy to Azure (free tier)
+
+# Manual dispatch only — we control when production deploys happen.
+# No automatic trigger on push.
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: 'Azure resource group name'
+        required: true
+        default: 'rg-mdh'
+      location:
+        description: 'Azure region'
+        required: true
+        default: 'eastus'
+
+# Permissions required for OIDC federated login to Azure.
+# One-time setup (per repo): create an Azure AD app registration with a federated
+# credential pointing to this repo/branch. Then add the following GitHub secrets:
+#
+#   AZURE_CLIENT_ID       — App registration (client) ID
+#   AZURE_TENANT_ID       — Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID — Target subscription ID
+#
+# Required for Bicep parameters (do NOT commit these values):
+#   DOCKERHUB_USERNAME    — Docker Hub username
+#   DOCKERHUB_TOKEN       — Docker Hub access token (read/write)
+#   SQL_ADMIN_LOGIN       — SQL Server admin login
+#   SQL_ADMIN_PASSWORD    — SQL Server admin password
+#   ANTHROPIC_API_KEY     — Anthropic API key
+#   JWT_SECRET            — JWT HS256 secret (≥64 chars)
+#
+# OIDC federated credential setup (run once from your laptop):
+#   az ad app create --display-name "mdh-github-deploy"
+#   APP_ID=$(az ad app list --display-name "mdh-github-deploy" --query '[0].appId' -o tsv)
+#   az ad sp create --id $APP_ID
+#   az role assignment create --assignee $APP_ID --role Contributor --scope /subscriptions/<SUB_ID>
+#   # Then in Azure portal → App registrations → mdh-github-deploy → Certificates & secrets
+#   # → Federated credentials → Add: GitHub Actions, repo=<owner>/MultifamilyDataHub, branch=main
+
+permissions:
+  id-token: write   # required for OIDC token
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ github.event.inputs.resource_group }}
+  LOCATION:       ${{ github.event.inputs.location }}
+
+jobs:
+  deploy:
+    name: Build, Push, Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 2. Azure OIDC login (no long-lived secrets stored in GitHub)
+      # ------------------------------------------------------------------
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ------------------------------------------------------------------
+      # 3. Docker Hub login
+      # ------------------------------------------------------------------
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ------------------------------------------------------------------
+      # 4. Set up Docker Buildx (multi-platform cache support)
+      # ------------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ------------------------------------------------------------------
+      # 5. Build and push all four service images
+      #    Tagged with both :latest and :<git-sha> for rollback capability
+      # ------------------------------------------------------------------
+      - name: Build and push MDH.IngestionService
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file:    src/MDH.IngestionService/Dockerfile
+          push:    true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-ingestion:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-ingestion:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build and push MDH.OrchestrationService
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file:    src/MDH.OrchestrationService/Dockerfile
+          push:    true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-orchestration:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-orchestration:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build and push MDH.AnalyticsApi
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file:    src/MDH.AnalyticsApi/Dockerfile
+          push:    true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-analytics-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-analytics-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build and push MDH.InsightsService
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file:    src/MDH.InsightsService/Dockerfile
+          push:    true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-insights:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/mdh-insights:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      # ------------------------------------------------------------------
+      # 6. Ensure resource group exists
+      # ------------------------------------------------------------------
+      - name: Create resource group (idempotent)
+        run: |
+          az group create \
+            --name     "$RESOURCE_GROUP" \
+            --location "$LOCATION" \
+            --output   none
+
+      # Register resource providers (idempotent)
+      - name: Register resource providers
+        run: |
+          for p in Microsoft.App Microsoft.Sql Microsoft.DocumentDB Microsoft.OperationalInsights; do
+            az provider register --namespace "$p" --output none
+          done
+
+      # ------------------------------------------------------------------
+      # 7. Bicep deployment — uses GitHub SHA as image tag so every deploy
+      #    is pinned to an exact build
+      # ------------------------------------------------------------------
+      - name: Deploy Bicep template
+        id: bicep
+        run: |
+          OUTPUT=$(az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file  infra/main.bicep \
+            --parameters     namePrefix=mdh \
+            --parameters     location="$LOCATION" \
+            --parameters     sqlAdminLogin="${{ secrets.SQL_ADMIN_LOGIN }}" \
+            --parameters     sqlAdminPassword="${{ secrets.SQL_ADMIN_PASSWORD }}" \
+            --parameters     anthropicApiKey="${{ secrets.ANTHROPIC_API_KEY }}" \
+            --parameters     jwtSecret="${{ secrets.JWT_SECRET }}" \
+            --parameters     dockerHubUsername="${{ secrets.DOCKERHUB_USERNAME }}" \
+            --parameters     imageTag="${{ github.sha }}" \
+            --output         json)
+
+          ANALYTICS_URL=$(echo "$OUTPUT" | jq -r '.properties.outputs.analyticsApiUrl.value')
+          INSIGHTS_URL=$(echo "$OUTPUT"  | jq -r '.properties.outputs.insightsUrl.value')
+
+          echo "analytics_url=$ANALYTICS_URL" >> "$GITHUB_OUTPUT"
+          echo "insights_url=$INSIGHTS_URL"   >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------------
+      # 8. Workflow summary — prints deployed URLs for quick access
+      # ------------------------------------------------------------------
+      - name: Post deployment summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## MultifamilyDataHub — Deployment Summary
+
+          | Service            | URL |
+          |--------------------|-----|
+          | Analytics API      | [${{ steps.bicep.outputs.analytics_url }}/swagger](${{ steps.bicep.outputs.analytics_url }}/swagger) |
+          | Analytics health   | [${{ steps.bicep.outputs.analytics_url }}/health](${{ steps.bicep.outputs.analytics_url }}/health) |
+          | Insights Service   | [${{ steps.bicep.outputs.insights_url }}/swagger](${{ steps.bicep.outputs.insights_url }}/swagger) |
+          | Insights health    | [${{ steps.bicep.outputs.insights_url }}/health](${{ steps.bicep.outputs.insights_url }}/health) |
+
+          **Image tag deployed:** \`${{ github.sha }}\`
+          **Deployed by:** ${{ github.actor }}
+          **Resource group:** ${{ env.RESOURCE_GROUP }}
+          EOF
