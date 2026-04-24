@@ -1,4 +1,3 @@
-using MDH.IngestionService.Models;
 using MDH.OrchestrationService.Persistence;
 using MDH.OrchestrationService.Persistence.Entities;
 using MDH.Shared.Contracts;
@@ -26,7 +25,7 @@ public class CleanListingsJob
         _logger.LogInformation("CleanListingsJob starting ETL batch");
 
         const int batchSize = 5000;
-        var raw = await _rawStore.GetUnprocessedAsync<RawListing>(batchSize);
+        var raw = await _rawStore.GetUnprocessedAsync<RawListingDocument>(batchSize);
 
         if (raw.Count == 0)
         {
@@ -55,7 +54,7 @@ public class CleanListingsJob
         {
             try
             {
-                var normalizedSubmarket = Normalize(rawListing.Submarket);
+                var normalizedSubmarket = rawListing.Submarket.Trim().ToLower();
                 if (!submarketMap.TryGetValue(normalizedSubmarket, out var submarketId))
                 {
                     _logger.LogWarning("Unknown submarket {Submarket}, skipping", rawListing.Submarket);
@@ -97,7 +96,7 @@ public class CleanListingsJob
 
                 await _db.SaveChangesAsync();
 
-                // Insert fact_daily_rent (ignore if already exists for today)
+                // Insert fact_daily_rent (skip if already loaded today for this listing)
                 var alreadyLoaded = await _db.FactDailyRents
                     .AnyAsync(f => f.ListingId == listingId && f.RentDate == today);
 
@@ -130,6 +129,4 @@ public class CleanListingsJob
 
         _logger.LogInformation("CleanListingsJob complete: processed {Count} listings", processedIds.Count);
     }
-
-    private static string Normalize(string s) => s.Trim().ToLower();
 }
