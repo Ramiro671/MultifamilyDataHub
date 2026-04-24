@@ -5,14 +5,20 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="MediatR" />
     <PackageReference Include="Polly" />
+    <PackageReference Include="Polly.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Http.Polly" />
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MDH.Shared\MDH.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Prompts\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
