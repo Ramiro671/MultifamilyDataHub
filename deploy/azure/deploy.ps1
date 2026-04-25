@@ -16,7 +16,7 @@
     Azure resource group name. Default: "rg-mdh".
 
 .PARAMETER Location
-    Azure region. Default: "eastus".
+    Azure region. Default: "westus2".
 
 .PARAMETER ParametersFile
     Path to the Bicep parameters file. Default: "infra/main.parameters.json".
@@ -32,7 +32,7 @@ param(
 
     [string]$SubscriptionId = "",
     [string]$ResourceGroup  = "rg-mdh",
-    [string]$Location       = "eastus",
+    [string]$Location       = "westus2",
     [string]$ParametersFile = "infra/main.parameters.json"
 )
 
