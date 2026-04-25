@@ -52,6 +52,19 @@ partial class WarehouseDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("State").IsRequired().HasMaxLength(50).HasColumnType("nvarchar(50)");
             b.HasKey("SubmarketId").HasName("PK_dim_submarket");
             b.ToTable("dim_submarket", "warehouse");
+            b.HasData(
+                new { SubmarketId = 1,  Name = "Austin",    State = "TX", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 2,  Name = "Houston",   State = "TX", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 3,  Name = "Dallas",    State = "TX", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 4,  Name = "Phoenix",   State = "AZ", Region = "Mountain West",       CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 5,  Name = "Atlanta",   State = "GA", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 6,  Name = "Denver",    State = "CO", Region = "Mountain West",       CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 7,  Name = "Miami",     State = "FL", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 8,  Name = "Nashville", State = "TN", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 9,  Name = "Tampa",     State = "FL", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 10, Name = "Orlando",   State = "FL", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 11, Name = "Raleigh",   State = "NC", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { SubmarketId = 12, Name = "Charlotte", State = "NC", Region = "Southeast/Southwest", CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
         });
 
         modelBuilder.Entity("MDH.OrchestrationService.Persistence.Entities.FactAnomaly", b =>

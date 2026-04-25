@@ -20,9 +20,9 @@ try
         .WriteTo.Console()
         .WriteTo.File("logs/analytics-.log", rollingInterval: RollingInterval.Day));
 
-    // EF Core
-    var sqlConn = builder.Configuration.GetConnectionString("SqlServer")
-        ?? builder.Configuration["SQL_CONNECTION_STRING"]
+    // EF Core — prefer explicit env var so the Container App secret overrides appsettings.json localhost default
+    var sqlConn = builder.Configuration["SQL_CONNECTION_STRING"]
+        ?? builder.Configuration.GetConnectionString("SqlServer")
         ?? throw new InvalidOperationException("SQL connection string not configured");
     builder.Services.AddDbContext<AnalyticsDbContext>(opts => opts.UseSqlServer(sqlConn));
 
@@ -86,7 +86,12 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    app.MapHealthChecks("/health");
+    // Liveness: always 200 if the process is alive (no SQL dependency — SQL auto-pauses on free tier)
+    app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = _ => false
+    });
+    // Readiness: SQL must respond (used by deployment checks, not liveness probe)
     app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
     {
         Predicate = check => check.Tags.Contains("ready")

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace MDH.OrchestrationService.Persistence.Migrations;
 
 /// <inheritdoc />
+[Migration("20240101000000_InitialWarehouseSchema")]
 public partial class InitialWarehouseSchema : Migration
 {
     /// <inheritdoc />
