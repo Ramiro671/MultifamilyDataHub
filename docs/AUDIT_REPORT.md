@@ -383,3 +383,87 @@ The only "incomplete" element is the `JwtTokenGenerator` static utility — it e
 **NO — with caveats.**
 
 The project is well-architected, the code is production-quality, and the documentation is strong. But items 1–4 in Critical Issues are all pushable in under an hour. Specifically: **no Dockerfiles** and **no working JWT demo flow** are the two that would embarrass the project in a recruiter walkthrough. Fix those four issues, run `dotnet format`, and the project moves to a solid 8.5–9/10.
+
+---
+
+## Production Deployment Post-Mortem
+**Date:** 2026-04-25
+**Environment:** Azure (rg-mdh / westus2 / Container Apps + Azure SQL serverless + Cosmos DB)
+**Symptom:** Analytics API returned 503 after first deployment; OrchestrationService crash-looped at 0 replicas.
+
+### Bug 1 — EF Core 9 `PendingModelChangesWarning` treated as fatal error
+
+**Root cause:** The hand-written `WarehouseDbContextModelSnapshot.cs` was missing `HasData(...)` for the `DimSubmarket` seed rows, while `OnModelCreating` called `modelBuilder.Entity<DimSubmarket>().HasData(submarkets)`. EF Core 9 (unlike EF Core 8) promotes this model/snapshot mismatch to `InvalidOperationException` by default. Every migration attempt threw immediately — the retry logic never reached a transient SQL error.
+
+**Fix:**
+1. Added 12 seed-data entries to the snapshot (`b.HasData(...)` block in `WarehouseDbContextModelSnapshot.cs`).
+2. Added `ConfigureWarnings(w => w.Log(RelationalEventId.PendingModelChangesWarning))` to `AddDbContext(...)` to downgrade from throw to log, providing a belt-and-suspenders safety net.
+
+**Lesson:** Hand-written EF Core migrations and snapshots require the same `HasData` calls that `dotnet ef migrations add` auto-generates. EF Core 9 is stricter about snapshot fidelity than prior versions.
+
+---
+
+### Bug 2 — Missing `[Migration]` attribute on hand-written migration class
+
+**Root cause:** Auto-generated migrations carry `[Migration("20240101000000_InitialWarehouseSchema")]` on the class. The hand-written class omitted it. EF Core uses this attribute (via `IMigrationsAssembly`) to map class → migration ID. Without it, `dotnet ef migrations list` reported "No migrations were found" and `MigrateAsync()` was a no-op.
+
+**Fix:** Added `[Migration("20240101000000_InitialWarehouseSchema")]` to the class declaration.
+
+**Schema unblocked:** Applied the warehouse schema directly via an idempotent `sqlcmd` script (`deploy/azure/_check_tables.ps1`) while the code fix was in flight. All 5 warehouse tables + 12 submarket seed rows confirmed with `sys.tables` query.
+
+**Lesson:** Every hand-written EF Core migration class must carry `[Migration("TIMESTAMP_ClassName")]`. This is easy to miss and silently breaks all tooling.
+
+---
+
+### Bug 3 — `GetConnectionString("SqlServer")` shadowed by `appsettings.json` localhost default
+
+**Root cause:** `appsettings.json` contains:
+```json
+"ConnectionStrings": { "SqlServer": "Server=localhost,1433;..." }
+```
+`Program.cs` in both `OrchestrationService` and `AnalyticsApi` read:
+```csharp
+var sqlConn = builder.Configuration.GetConnectionString("SqlServer")  // <-- finds localhost
+    ?? builder.Configuration["SQL_CONNECTION_STRING"];                 // <-- never reached
+```
+`GetConnectionString("SqlServer")` returned the localhost string (non-null), so the Azure Container App secret (`SQL_CONNECTION_STRING`) was silently ignored. Both services connected to `localhost:1433`, producing TCP error 40 "Could not open a connection". The same bug affected Hangfire's `HangfireStorage` connection string.
+
+**Fix:** Swapped precedence — check explicit env var first:
+```csharp
+var sqlConn = builder.Configuration["SQL_CONNECTION_STRING"]
+    ?? builder.Configuration.GetConnectionString("SqlServer")
+    ?? throw ...;
+```
+`hangfireConn` was simplified to `sqlConn` directly (no fallback lookup).
+
+**Lesson:** When `.appsettings.json` carries non-null development defaults, `??` precedence must put the explicit env-var check *first*. Alternatively, use the idiomatic .NET naming (`ConnectionStrings__SqlServer` as an env var) which automatically overrides the JSON value — but requires updating the Bicep template.
+
+---
+
+### Bug 4 — `/health` liveness endpoint included SQL readiness check
+
+**Root cause:** All three HTTP services mapped `/health` with no predicate (runs all registered health checks), including `.AddSqlServer(sqlConn, name: "sql-server", tags: ["ready"])`. Azure SQL serverless auto-pauses after 60 minutes of inactivity; cold-start takes 30–60 s. During that window the SQL health check timed out, making `/health` return 503 — Container Apps marked the revision Unhealthy.
+
+**Fix:** Changed `/health` to exclude dependency checks (liveness probe = process alive, no more):
+```csharp
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+```
+Applied to `AnalyticsApi`, `OrchestrationService`, and `InsightsService`.
+
+**Lesson:** Liveness and readiness probes must be decoupled. A liveness probe that depends on a database will cause restart storms whenever the DB is momentarily unavailable — which is expected behavior on auto-pause serverless tiers.
+
+---
+
+### Final state after remediation
+| Service | Replicas | Health |
+|---|---|---|
+| ca-mdh-analytics-api | 1 | Healthy |
+| ca-mdh-orchestration | 1 | Healthy |
+| ca-mdh-ingestion | 1 | Healthy (worker, 0 HTTP traffic) |
+| ca-mdh-insights | 1 | Healthy |
+
+SQL firewall: `AllowAllAzureServices` (0.0.0.0) + `AllowMyIp` only.
