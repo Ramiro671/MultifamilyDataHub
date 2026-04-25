@@ -269,7 +269,29 @@ Add [gitleaks](https://github.com/gitleaks/gitleaks) as a pre-commit hook to cat
 - **Ignoring `dotnet test` exit code in CI.** If `dotnet test` returns non-zero, the CI step should fail. Most CI systems handle this automatically, but a script that runs `dotnet test; echo done` ignores the exit code. Use `set -e` in bash or PowerShell's `$ErrorActionPreference = "Stop"`.
 
 ---
+## Case Study — The Placeholder That Wasn't
 
+During the first Azure deployment, `infra/main.parameters.example.json` shipped with this value for `sqlAdminPassword`:
+
+    "value": "REPLACE_WITH_STRONG_PASSWORD_Min8_Uppercase_Digit_Symbol"
+
+The string is meant to be obviously a placeholder. But it accidentally satisfies Azure SQL's complexity policy: 8+ chars, uppercase, digit, symbol (the underscores count). When the file was copied to `infra/main.parameters.json` without the value being changed, Bicep accepted the placeholder verbatim and Azure SQL set it as the real admin password. The connection string secret then got the same literal value. The whole stack worked — until I noticed the placeholder string was already in public git history.
+
+**Four lessons from this:**
+
+1. **Placeholders must be syntactically invalid for the field they shape.** `<<set-via-deploy>>` cannot pass any password complexity rule. `REPLACE_WITH_STRONG_PASSWORD_...` can.
+2. **Pre-deploy validation should reject suspicious values for `@secure()` parameters.** A regex run against the parameter file before `az deployment` would catch this: anything matching `/REPLACE|TODO|CHANGE_?ME|<<.*>>/i` aborts the deploy.
+3. **Treat git history as adversarial.** Once a value enters `git log`, it is compromised even if rewritten later. The fix is to rotate the secret, not to rewrite history.
+4. **The pattern that prevents this whole class of bug:** `main.parameters.example.json` is committed with explicit invalid markers; `main.parameters.json` is `.gitignore`d and contains real values locally; CI pipelines inject real values from GitHub Secrets / Key Vault at deploy time. Local dev never touches CI secrets.
+
+The rotation procedure when this kind of leak is detected:
+
+1. Generate strong random password (24 chars, ≥4 symbols, **shell-safe character set** to avoid pipe / redirect collisions in CLI invocations).
+2. `az sql server update --admin-password <new>` to change it on the server. Verify exit code, never trust a green print without a real check.
+3. `az containerapp secret set sql-connection-string=<new-conn-string>` for each consuming service.
+4. `az containerapp revision restart` to pick up the new secret.
+5. Verify `/health` returns 200 across all services.
+6. Commit the cleaned-up parameters file with `<<...>>` markers.
 ## Interview Angle — Smart Apartment Data
 
 1. **"Walk me through your Dockerfile."** — Multi-stage build: SDK stage for compilation (layer cache optimized — csproj files copied before source), runtime stage for execution (200MB vs 800MB SDK). Non-root user for security. ENTRYPOINT in exec form so the .NET process is PID 1 and receives SIGTERM for graceful shutdown. `.dockerignore` prevents build context bloat and accidental secret inclusion.
