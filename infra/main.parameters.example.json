@@ -1,4 +1,4 @@
-{
+﻿{
   "contentVersion": "1.0.0.0",
   "parameters": {
     "location": {
@@ -11,10 +11,10 @@
       "value": "mdhsqladmin"
     },
     "sqlAdminPassword": {
-      "value": "REPLACE_WITH_STRONG_PASSWORD_Min8_Uppercase_Digit_Symbol"
+      "value": "<<set-locally-or-via-deploy-script>>"
     },
     "anthropicApiKey": {
-      "value": "sk-ant-REPLACE_ME"
+      "value": "<<your-anthropic-api-key>>"
     },
     "jwtSecret": {
       "value": "REPLACE_WITH_64_CHAR_RANDOM_SECRET_HERE_MINIMUM_64_BYTES_PLEASE"
@@ -27,3 +27,4 @@
     }
   }
 }
+
