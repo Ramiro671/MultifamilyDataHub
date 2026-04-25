@@ -1,6 +1,17 @@
-# Azure Production Deployment — MultifamilyDataHub
+# 14a — Azure Production Deployment
 
-> **This is the actionable deploy guide.** For the conceptual AWS vs Azure comparison see [`docs/CLOUD_DEPLOYMENT.md`](CLOUD_DEPLOYMENT.md).
+> **Study time:** ~40 minutes
+> **Prerequisites:** [`14_CLOUD_FUNDAMENTALS.md`](./14_CLOUD_FUNDAMENTALS.md)
+
+## Why this matters
+
+"Walk me through your deployment" is one of the most common technical interview questions for a cloud-aware backend role. If you cannot describe your own deployed system in detail — resource names, Bicep structure, free-tier math, the bugs you hit — you will be outcompeted by candidates who can. This doc is that walkthrough in written form.
+
+By the end of this doc you will be able to: (1) list all Azure resources by name and explain their role; (2) walk through the Bicep deployment structure and explain `uniqueString()`, `@secure()`, and container app property nesting; (3) tell the story of all five cloud-specific bugs you shipped through and what you learned from each.
+
+---
+
+> **This is the actionable deploy guide.** For cloud fundamentals concepts see [`14_CLOUD_FUNDAMENTALS.md`](./14_CLOUD_FUNDAMENTALS.md). For DevOps and Docker specifics see [`14b_DEVOPS_AND_SUPPLY_CHAIN.md`](./14b_DEVOPS_AND_SUPPLY_CHAIN.md).
 
 ---
 
@@ -449,3 +460,102 @@ For automated deploys via GitHub Actions, see `.github/workflows/deploy-azure.ym
 | `JWT_SECRET` | 64-char random string |
 
 The workflow runs **only on manual dispatch** (Actions → Deploy to Azure → Run workflow).
+
+---
+
+## Resource Inventory (Live Deployment)
+
+After deployment, `az resource list -g rg-mdh -o table` shows:
+
+| Resource | Name pattern | Type |
+|---|---|---|
+| Resource group | `rg-mdh` | resourceGroups |
+| Log Analytics | `log-mdh-<suffix>` | OperationalInsights/workspaces |
+| Container Apps Environment | `cae-mdh` | App/managedEnvironments |
+| Container App — Ingestion | `ca-mdh-ingestion` | App/containerApps |
+| Container App — Orchestration | `ca-mdh-orchestration` | App/containerApps |
+| Container App — Analytics API | `ca-mdh-analytics-api` | App/containerApps |
+| Container App — Insights | `ca-mdh-insights` | App/containerApps |
+| Azure SQL Server | `sql-mdh-<suffix>` | Sql/servers |
+| Azure SQL Database | `MDH` | Sql/servers/databases |
+| Cosmos DB account | `cosmos-mdh-<suffix>` | DocumentDB/databaseAccounts |
+
+`<suffix>` = `uniqueString(resourceGroup().id)` — a deterministic 13-char hash for globally unique names.
+
+**Public URLs (your suffixes will differ):**
+- Analytics API: `https://ca-mdh-analytics-api.thankfulsand-93b45737.westus2.azurecontainerapps.io`
+- Insights: `https://ca-mdh-insights.thankfulsand-93b45737.westus2.azurecontainerapps.io`
+
+---
+
+## Why westus2 Not eastus
+
+First deployment attempt: `az sql server create --location eastus` returned `RegionDoesNotAllowProvisioning`. Azure free SQL offers have regional capacity constraints. Probe with a test resource before a full Bicep deployment. `westus2` succeeded.
+
+The deploy script `deploy/azure/deploy.ps1` defaults to `$Location = "westus2"`. This is a one-line change that cost two wasted deploys to discover.
+
+---
+
+## The 5 Cloud-Specific Bugs
+
+**Bug 1 — Region capacity:** `RegionDoesNotAllowProvisioning` for `eastus` SQL Server. Fix: probe candidate regions, switch to `westus2`. Lesson: free offers are regionally constrained.
+
+**Bug 2 — Hardcoded region in deploy.ps1:** `eastus` appeared 8 times. Fix: parameterize `$Location` at the top of the script. Lesson: configuration in one place, not scattered through scripts.
+
+**Bug 3 — Cosmos DB name reservation:** `az group delete` completed but re-deploying with the same Cosmos account name failed ("name reserved for 7 days"). Fix: `uniqueString()` in Bicep so names are deterministic but unique per resource group. Lesson: some Azure resources have soft-delete with name reservation windows.
+
+**Bug 4 — Placeholder password accepted:** `sqlAdminPassword = "REPLACE_WITH_PASSWORD"` passed Azure's complexity check. Server created with literal placeholder. Fix: add validation in `deploy.ps1`: `if ($params.sqlAdminPassword.value -match "REPLACE_") { throw }`. Lesson: validate parameter files before deploying.
+
+**Bug 5 — /health conflating liveness with readiness:** Documented in `AUDIT_REPORT.md`. Azure SQL auto-paused → `/health` returned 503 → Container Apps killed container → restart loop. Fix: `Predicate = _ => false` for liveness. Lesson: liveness must not check external dependencies.
+
+---
+
+## Known Limitations
+
+| Limitation | Production upgrade |
+|---|---|
+| SQL and Cosmos on public internet | VNet integration + service endpoints |
+| Secrets in Container App env vars | Managed identity + Azure Key Vault |
+| Single region | Azure Front Door + second region |
+| Manual image promotion | GitHub Actions CI/CD on merge to main |
+| No distributed tracing | OpenTelemetry → Application Insights |
+
+---
+
+## Exercise
+
+1. Open `infra/main.bicep` and find the `uniqueString()` call. What changes if you deploy to a different resource group? Do resource names conflict with the existing deployment?
+
+2. The Container App for `ca-mdh-orchestration` uses `ingress: { external: false }`. What does this mean for accessing the Hangfire dashboard from outside Azure?
+
+3. A colleague suggests pinning the Docker image tag to `:latest` instead of a git SHA. What is the rollback procedure if `:latest` is a broken build?
+
+4. The deploy script builds and pushes images before Bicep deployment. What happens if `docker push` succeeds but `az deployment group create` fails halfway through?
+
+---
+
+## Common mistakes
+
+- **Pushing only `:latest`.** Rollback requires knowing which previous `:latest` was — which is gone. Always tag with git SHA too.
+
+- **Not validating parameters before deploy.** Placeholder values that pass complexity checks cause silent misconfigurations. Validate explicitly.
+
+- **Assuming SQL is always available.** Serverless auto-pauses after 60 min idle. Cold-start takes 30–60s. Design retry logic accordingly.
+
+- **No budget alert.** A runaway container can exhaust free grants in hours. Set a $5/month alert before first deploy.
+
+- **`az group delete` without `--yes` in automation.** Prompts block forever in CI.
+
+---
+
+## Interview Angle — Smart Apartment Data
+
+1. **"Walk me through your Azure deployment."** — Four Container Apps with scale-to-zero on a consumption plan. Azure SQL serverless + Cosmos DB free tier for storage. Deployed via Bicep (`uniqueString()` for unique names, `@secure()` for secrets). Deploy script builds and pushes Docker images, runs `az deployment group create`. Verified with `/health` on all four apps. Cost: ~$0/month at demo traffic.
+
+2. **"What is Bicep?"** — Azure's DSL for infrastructure as code. Compiles to ARM JSON. Advantages: declarative, type-checked, readable. The Azure equivalent of AWS CloudFormation with better syntax.
+
+3. **"What would you do differently in production?"** — Managed identity + Key Vault for secrets, VNet integration to take SQL off public internet, multi-region with Front Door, automated image promotion on CI, OpenTelemetry distributed tracing.
+
+4. **30-second talking point:** "The deployment is Bicep-based, idempotent, and all infrastructure as code. uniqueString() handles globally unique names. I hit five cloud-specific bugs during the original deploy — region capacity, hardcoded region, Cosmos name reservation, placeholder password, and liveness/readiness conflation. Each is documented with root cause and fix in the post-mortem. The live URLs are public — I can show you the Swagger UI and a live API call."
+
+5. **Job requirement proof:** "Cloud (AWS/Azure)" — live Azure deployment, Bicep IaC, Container Apps scale-to-zero, documented deployment bugs and lessons.

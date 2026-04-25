@@ -1,4 +1,15 @@
-# Data Dictionary — MultifamilyDataHub
+# 05 — Data Dictionary
+
+> **Study time:** ~15 minutes
+> **Prerequisites:** [`03_DATA_WAREHOUSING_SQLSERVER.md`](./03_DATA_WAREHOUSING_SQLSERVER.md), [`04_NOSQL_LANDING_ZONE_MONGODB.md`](./04_NOSQL_LANDING_ZONE_MONGODB.md)
+
+## Why this matters
+
+Domain vocabulary is tested in every technical interview at a data company. If an interviewer at Smart Apartment Data asks "what is effective rent?" and you say "uh, the rent amount?" you have failed the domain knowledge check. These are the terms their engineering, product, and analytics teams use daily. Knowing them precisely signals that you can work without a glossary attached to every ticket.
+
+By the end of this doc you will be able to: (1) define every domain-specific term used in this codebase from memory; (2) identify the column in each table that corresponds to a given business concept; (3) expand any acronym used in the codebase or architecture.
+
+---
 
 ## SQL Tables (warehouse schema)
 
@@ -155,3 +166,50 @@ Raw scraped listing documents in the landing zone. One document per listing tick
 | FK | Foreign Key — a column referencing a PK in another table |
 | TTL | Time To Live — automatic document/record expiration policy |
 | RBAC | Role-Based Access Control — authorization model based on user roles |
+| NRT | Nullable Reference Types — C# 8+ compile-time nullability annotations |
+| NCI | Non-Clustered Index — SQL Server secondary index stored separately from table data |
+| SCD | Slowly Changing Dimension — dimension that changes infrequently over time |
+| OLAP | Online Analytical Processing — read-optimized, aggregation-heavy workload |
+| OLTP | Online Transaction Processing — write-optimized, transactional workload |
+| OCI | Open Container Initiative — standard for container image format and runtime |
+| JD | Job Description |
+
+---
+
+## Exercise
+
+1. A colleague says "the grain of fact_daily_rent is per listing." Is that statement complete? What is missing and why does it matter?
+
+2. Open `src/MDH.OrchestrationService/Jobs/CleanListingsJob.cs` line 39. The code computes `rawListing.AskingRent - rawListing.Concessions`. What domain term does this compute? Which column stores the result in `fact_daily_rent`?
+
+3. What is the difference between `asking_rent` and `effective_rent` in a scenario where a 2-bedroom unit advertises $2,500/month with "1 month free" on a 12-month lease?
+
+4. Name three scenarios where `IsResolved = true` would be set on a `fact_anomaly` row and explain who (which process or person) would set it in a production system.
+
+---
+
+## Common mistakes
+
+- **Confusing asking rent with effective rent in queries.** Aggregating `asking_rent` instead of `effective_rent` overstates market rent by the concession amount. For occupancy and demand metrics, `effective_rent` is the correct measure. `asking_rent` is the headline number operators advertise.
+
+- **Treating SubmarketId as a stable natural key.** `SubmarketId` is a surrogate auto-increment identity. Do not hardcode `SubmarketId = 1` for Austin in application code — it is an implementation detail. Look up the submarket by `Name` and let the DB return the ID.
+
+- **Using the MongoDB `_id` as a cross-system identifier.** The MongoDB `ObjectId` in `listings_raw` is MongoDB-internal. The `external_id` field is the business key that crosses the MongoDB→SQL boundary. `ListingId` in SQL is a new GUID that the ETL job mints — it is not derived from the MongoDB `_id`.
+
+- **Omitting the grain from fact table design.** "A fact table for rent data" is underspecified. "A fact table with grain = one listing × one calendar day" is a complete spec that drives the uniqueness constraint, the allowed dimensions, and what GROUP BY means.
+
+- **Using acronyms without defining them in team communications.** SCD, SLA, MQL, and CQRS all mean specific things; using them casually without confirming shared understanding is a source of miscommunication in design documents and code reviews.
+
+---
+
+## Interview Angle — Smart Apartment Data
+
+1. **"What is the difference between asking rent and effective rent?"** — Asking rent is the advertised price. Effective rent is asking rent minus concessions. If a unit is $2,500/month with "1 month free" on a 12-month lease, effective rent = $2,500 × 11/12 = $2,292. Analysts and operators always work with effective rent for economic modeling.
+
+2. **"What does 'grain' mean in a fact table?"** — The grain is the level of detail of a single row. It must be defined explicitly before the table is designed because it determines which dimensions you can attach and what aggregate functions mean. In `fact_daily_rent`, the grain is one listing × one calendar day. Violating the grain — e.g., inserting two rows for the same listing on the same day — is caught by the unique constraint `IX_fact_daily_rent_ListingId_RentDate`.
+
+3. **"What is a submarket in this context?"** — A named metropolitan micro-market used as the primary geographic unit of analysis. Not a zip code, not a neighborhood — a coarse-grained segment of a major metropolitan area that operators use to compare properties. In this system: Austin, Houston, Dallas, Phoenix, Atlanta, Denver, Miami, Nashville, Tampa, Orlando, Raleigh, Charlotte.
+
+4. **30-second talking point:** "The vocabulary matters as much as the code. Effective rent is the economic cash flow, not the headline price. Grain defines what a fact row represents and what GROUP BY means. Landing zone is where raw data arrives before transformation. Curated zone is where it goes after ETL. Understanding these terms precisely is how you read a data ticket without asking follow-up questions."
+
+5. **Job requirement proof:** Domain knowledge — the reserved domain words section demonstrates familiarity with multifamily rental data terminology used by Smart Apartment Data's product and analytics teams.

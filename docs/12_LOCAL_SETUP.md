@@ -1,4 +1,17 @@
-# Local Setup Guide — MultifamilyDataHub
+# 12 — Local Setup Guide
+
+> **Study time:** ~15 minutes
+> **Prerequisites:** [`01_PROJECT_STRUCTURE.md`](./01_PROJECT_STRUCTURE.md)
+>
+> Cross-links: [`13_DEBUGGING_TROUBLESHOOTING.md`](./13_DEBUGGING_TROUBLESHOOTING.md) for debugger attach details | [`14a_AZURE_PRODUCTION_DEPLOYMENT.md`](./14a_AZURE_PRODUCTION_DEPLOYMENT.md) for cloud version
+
+## Why this matters
+
+Being able to reproduce a dev environment from scratch — in under 10 minutes, without asking anyone — is a first-day competency expectation at any senior-level backend role. Knowing which Docker ports bind to which services, how config is layered (appsettings → env var → CLI args), and how to regenerate synthetic data are the practical skills that demonstrate operational ownership.
+
+By the end of this doc you will be able to: (1) bring the full local stack up from zero; (2) generate a JWT and make authenticated API calls; (3) use the breakpoint map to navigate to the most instructive code paths.
+
+---
 
 ## Prerequisites
 
@@ -213,3 +226,41 @@ The IngestionService runs continuously. To regenerate data from scratch:
 | Orchestration health | http://localhost:5020/health |
 | Analytics API Swagger | http://localhost:5030/swagger |
 | Insights Service Swagger | http://localhost:5040/swagger |
+
+---
+
+## Exercise
+
+1. Start only `docker compose -f docker/docker-compose.yml up -d` (infrastructure only, no services). Hit `http://localhost:5030/health` — what response do you get? Why?
+
+2. Run `dotnet run --project src/MDH.AnalyticsApi` without setting `JWT_SECRET`. What value does the auth middleware use? Where in `Program.cs` is the fallback defined?
+
+3. Open Swagger at `http://localhost:5030/swagger`. Without clicking "Authorize", try `GET /api/v1/markets`. What HTTP status code comes back and why?
+
+4. Stop IngestionService after it has run for 2 minutes. How many documents are in `listings_raw`? How do you check? (Hint: `docker exec mdh-mongo mongosh -u mdh -p mdh --eval "use mdh_raw; db.listings_raw.countDocuments()"`)
+
+---
+
+## Common mistakes
+
+- **Starting services before infrastructure is healthy.** Running `dotnet run` before MongoDB and SQL Server containers are up causes connection errors at startup. Wait for `docker compose ps` to show both as healthy.
+
+- **Wrong SQL connection string in `.env`.** The default `TrustServerCertificate=True` is required for the local Docker SQL Server (self-signed cert). Removing it causes `System.Security.Authentication.AuthenticationException`.
+
+- **Running `dotnet ef database update` without the correct project path.** Run from the repo root with `--project src/MDH.OrchestrationService`. Without `--project`, EF CLI looks for a DbContext in the current directory.
+
+- **Generating a JWT with the wrong secret.** `JwtTokenGenerator.GenerateDemoToken()` uses the secret from configuration. If your `.env` has a different `JWT_SECRET` than what you pass to Swagger, every request returns 401. Use the same secret in both places.
+
+- **Forgetting to clear MongoDB between test runs.** Synthetic data accumulates. After regenerating, the CleanListingsJob will process old documents again, potentially creating duplicate attempts (blocked by the `(ListingId, RentDate)` unique constraint — harmless but noisy in logs).
+
+---
+
+## Interview Angle — Smart Apartment Data
+
+1. **"How do you set up this project locally in 10 minutes?"** — Clone → `cp .env.example .env` → fill `ANTHROPIC_API_KEY` → `docker compose -f docker/docker-compose.yml up -d` → wait for healthy containers → `dotnet run` in four terminals (or use the Visual Studio multi-startup config). Total: ~8 minutes on first run, cached Docker images make it ~3 minutes after.
+
+2. **"How do you verify the ETL pipeline is running?"** — Open Hangfire dashboard at `http://localhost:5020/hangfire` → Jobs → Succeeded. You should see CleanListingsJob firing every minute. Cross-check: query `SELECT COUNT(*) FROM warehouse.fact_daily_rent` in SSMS or the SQL query editor.
+
+3. **"Walk me through making an authenticated API call."** — Call `http://localhost:5030/api/v1/auth/demo-token` to get a JWT, or generate one via `JwtTokenGenerator.GenerateDemoToken()`. Copy the token. In Swagger: click "Authorize" → enter `Bearer <token>`. Or in curl: `curl -H "Authorization: Bearer <token>" http://localhost:5030/api/v1/markets`.
+
+4. **30-second talking point:** "The local stack is Docker-based: SQL Server + MongoDB in containers, four .NET services in separate terminals. The breakpoint map in the docs points to seven specific locations in the code where you can pause execution and inspect the live data pipeline. The entire environment can be reproduced from clone to running API in under 10 minutes."

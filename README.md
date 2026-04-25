@@ -18,9 +18,9 @@ This repository shows end-to-end backend engineering across the full stack of a 
 | Data Warehousing | `dim_listing`, `dim_submarket`, `fact_daily_rent`, `fact_market_metrics`, `fact_anomaly` |
 | Large datasets / pipelines | 1,000 synthetic listings per tick × continuous → multi-million row ETL |
 | Microservices | 4 independently deployable services + shared library |
-| Cloud (AWS / Azure) | Dockerfiles + `docs/CLOUD_DEPLOYMENT.md` with ECS Fargate and Azure Container Apps |
+| Cloud (AWS / Azure) | Dockerfiles + [`docs/14_CLOUD_FUNDAMENTALS.md`](docs/14_CLOUD_FUNDAMENTALS.md) with ECS Fargate and Azure Container Apps |
 | AI tools in workflow | `MDH.InsightsService` calls Anthropic Claude for market summaries & anomaly explanations |
-| Debug / troubleshoot | `🔴 BREAKPOINT` comments at all critical paths; debugger guide in `docs/LOCAL_SETUP.md` |
+| Debug / troubleshoot | `🔴 BREAKPOINT` comments at all critical paths; debugger guide in [`docs/12_LOCAL_SETUP.md`](docs/12_LOCAL_SETUP.md) |
 | Unit tests | xUnit + Moq + FluentAssertions — 23 tests across 3 test projects |
 | CI/CD | GitHub Actions build + test pipeline on push and PR |
 
@@ -47,7 +47,7 @@ MDH.IngestionService ──▶ MongoDB (Landing Zone)
             MDH.InsightsService ──▶ Anthropic Claude API
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full diagram and per-service breakdown.
+See [`docs/02_ARCHITECTURE.md`](docs/02_ARCHITECTURE.md) for the full diagram and per-service breakdown.
 
 ---
 
@@ -74,13 +74,13 @@ Get a live URL in under 30 minutes — runs at **$0–$2/month** with scale-to-z
 2. Run `.\deploy\azure\deploy.ps1 -DockerHubUsername <your-username>`
 3. Visit the printed URL — Swagger is live
 
-Full guide: **[docs/AZURE_PRODUCTION_DEPLOYMENT.md](docs/AZURE_PRODUCTION_DEPLOYMENT.md)**
+Full guide: **[docs/14a_AZURE_PRODUCTION_DEPLOYMENT.md](docs/14a_AZURE_PRODUCTION_DEPLOYMENT.md)**
 
 ---
 
 ## Quickstart (Local)
 
-See **[docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)** for the full setup walkthrough.
+See **[docs/12_LOCAL_SETUP.md](docs/12_LOCAL_SETUP.md)** for the full setup walkthrough.
 
 **TL;DR:**
 
@@ -130,6 +130,33 @@ See:
 - [`src/MDH.InsightsService/Prompts/market-summary.md`](src/MDH.InsightsService/Prompts/market-summary.md)
 - [`src/MDH.InsightsService/Prompts/listing-explain.md`](src/MDH.InsightsService/Prompts/listing-explain.md)
 - [`src/MDH.InsightsService/Anthropic/AnthropicClient.cs`](src/MDH.InsightsService/Anthropic/AnthropicClient.cs)
+
+---
+
+## Documentation
+
+Numbered study curriculum covering every concept in this codebase — structured for interview preparation.
+
+| # | File | What it covers |
+|---|---|---|
+| 00 | [00_INDEX.md](docs/00_INDEX.md) | Table of contents, reading paths, glossary pointer |
+| 01 | [01_PROJECT_STRUCTURE.md](docs/01_PROJECT_STRUCTURE.md) | Solution layout, `global.json`, CPM, `Directory.Build.props` |
+| 02 | [02_ARCHITECTURE.md](docs/02_ARCHITECTURE.md) | End-to-end data flow, microservices tradeoffs, medallion pattern |
+| 03 | [03_DATA_WAREHOUSING_SQLSERVER.md](docs/03_DATA_WAREHOUSING_SQLSERVER.md) | Star schema, dim/fact tables, EF Core, index strategy |
+| 04 | [04_NOSQL_LANDING_ZONE_MONGODB.md](docs/04_NOSQL_LANDING_ZONE_MONGODB.md) | MongoDB landing zone, schema-on-read, driver patterns |
+| 05 | [05_DATA_DICTIONARY.md](docs/05_DATA_DICTIONARY.md) | Every SQL table and MongoDB document shape, domain glossary |
+| 06 | [06_MDH_SHARED.md](docs/06_MDH_SHARED.md) | Shared library, domain primitives, `Result<T>`, contracts |
+| 07 | [07_MDH_INGESTIONSERVICE.md](docs/07_MDH_INGESTIONSERVICE.md) | `BackgroundService`, Bogus faker, MongoDB writes |
+| 08 | [08_MDH_ORCHESTRATIONSERVICE.md](docs/08_MDH_ORCHESTRATIONSERVICE.md) | Hangfire, ETL jobs, 3-sigma anomaly detection |
+| 09 | [09_MDH_ANALYTICSAPI.md](docs/09_MDH_ANALYTICSAPI.md) | MediatR CQRS, Minimal API, JWT auth, EF Core reads |
+| 10 | [10_MDH_INSIGHTSSERVICE.md](docs/10_MDH_INSIGHTSSERVICE.md) | Anthropic client, Polly retry/circuit breaker, prompt engineering |
+| 11 | [11_REST_API_DESIGN_CSHARP.md](docs/11_REST_API_DESIGN_CSHARP.md) | Richardson Maturity Model, HTTP semantics, ProblemDetails |
+| 12 | [12_LOCAL_SETUP.md](docs/12_LOCAL_SETUP.md) | Prerequisite install, Docker Compose, debugger attach, curl examples |
+| 13 | [13_DEBUGGING_TROUBLESHOOTING.md](docs/13_DEBUGGING_TROUBLESHOOTING.md) | VS/VS Code debugger, breakpoint map, 4 bug post-mortems |
+| 14 | [14_CLOUD_FUNDAMENTALS.md](docs/14_CLOUD_FUNDAMENTALS.md) | IaaS/PaaS, containers, probes, 12-factor, secrets management |
+| 14a | [14a_AZURE_PRODUCTION_DEPLOYMENT.md](docs/14a_AZURE_PRODUCTION_DEPLOYMENT.md) | Bicep, Container Apps, free-tier deployment walkthrough |
+| 14b | [14b_DEVOPS_AND_SUPPLY_CHAIN.md](docs/14b_DEVOPS_AND_SUPPLY_CHAIN.md) | Multi-stage Docker, GitHub Actions CI, image tagging, SBOM |
+| 15 | [15_INTERVIEW_PREP.md](docs/15_INTERVIEW_PREP.md) | 31 Q&A pairs, elevator pitch, system design, salary anchor |
 
 ---
 
